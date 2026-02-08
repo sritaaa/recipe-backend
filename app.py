@@ -13,7 +13,11 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 
 # Load Whisper model ONCE (important)
 # Options: "tiny", "base", "small"
-model = WhisperModel("tiny", device="cpu", compute_type="int8")
+model = WhisperModel(
+    "tiny",               # good balance
+    device="cpu",         # use "cuda" if you have GPU
+    compute_type="int8"   # fast + low memory
+)
 
 # ---------------- APP ----------------
 app = Flask(__name__)
@@ -40,6 +44,7 @@ def get_transcript():
             "format": "bestaudio/best",
             "outtmpl": output_template,
             "quiet": True,
+            "cookiesfrombrowser": ("chrome",),  # ✅ FIX: Use browser cookies
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
