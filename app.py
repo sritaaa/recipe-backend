@@ -13,11 +13,7 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 
 # Load Whisper model ONCE (important)
 # Options: "tiny", "base", "small"
-model = WhisperModel(
-    "base",               # good balance
-    device="cpu",         # use "cuda" if you have GPU
-    compute_type="int8"   # fast + low memory
-)
+model = WhisperModel("tiny", device="cpu", compute_type="int8")
 
 # ---------------- APP ----------------
 app = Flask(__name__)
