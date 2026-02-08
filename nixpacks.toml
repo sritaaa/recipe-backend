@@ -1,8 +1,11 @@
 [phases.setup]
-aptPkgs = ["ffmpeg", "libsndfile1"]
+aptPkgs = ["ffmpeg"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = ["pip install --no-cache-dir --upgrade pip", "pip install --no-cache-dir -r requirements.txt"]
 
 [variables]
 PYTHONUNBUFFERED = "1"
+
+[start]
+cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120"
