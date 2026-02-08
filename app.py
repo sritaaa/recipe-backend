@@ -1,80 +1,96 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import (
-    TranscriptsDisabled,
-    NoTranscriptFound,
-    VideoUnavailable
-)
-import re
+import yt_dlp
+import os
+import uuid
+import glob
+from faster_whisper import WhisperModel
 
+# ---------------- CONFIG ----------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+AUDIO_DIR = os.path.join(BASE_DIR, "audio_tmp")
+os.makedirs(AUDIO_DIR, exist_ok=True)
+
+# Load Whisper model ONCE (important)
+# Options: "tiny", "base", "small"
+model = WhisperModel(
+    "base",               # good balance
+    device="cpu",         # use "cuda" if you have GPU
+    compute_type="int8"   # fast + low memory
+)
+
+# ---------------- APP ----------------
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/')
+@app.route("/", methods=["GET"])
 def home():
-    return "Recipe Backend API is running! ✅"
+    return "Local Whisper Backend Running ✅"
 
-@app.route('/get-transcript', methods=['GET', 'POST'])
+@app.route("/get-transcript", methods=["POST"])
 def get_transcript():
     try:
-        # Read URL
-        if request.method == 'POST':
-            data = request.json or {}
-            video_url = data.get('url', '')
-        else:
-            video_url = request.args.get('url', '')
+        data = request.json
+        youtube_url = data.get("url")
 
-        if not video_url:
-            return jsonify({'success': False, 'error': 'URL is required'}), 400
+        if not youtube_url:
+            return jsonify({"success": False, "error": "No URL provided"}), 400
 
-        # Extract video ID
-        match = re.search(r'(?:v=|/)([0-9A-Za-z_-]{11})', video_url)
-        if not match:
-            return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
+        uid = str(uuid.uuid4())
+        output_template = os.path.join(AUDIO_DIR, uid)
 
-        video_id = match.group(1)
+        # Download audio
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": output_template,
+            "quiet": True,
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ],
+        }
 
-        # 🔑 EXACTLY like Streamlit app
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([youtube_url])
 
-        # Prefer English
-        try:
-            transcript_obj = transcript_list.find_manually_created_transcript(['en'])
-        except:
-            transcript_obj = transcript_list.find_generated_transcript(['en'])
+        # Find mp3
+        mp3_files = glob.glob(os.path.join(AUDIO_DIR, f"{uid}*.mp3"))
+        if not mp3_files:
+            return jsonify({
+                "success": False,
+                "error": "Audio conversion failed"
+            }), 500
 
-        transcript_data = transcript_obj.fetch()
-        transcript = " ".join(item['text'] for item in transcript_data)
+        audio_path = mp3_files[0]
+
+        # ---------------- WHISPER ----------------
+        segments, info = model.transcribe(audio_path)
+
+        transcript_text = ""
+        for segment in segments:
+            transcript_text += segment.text + " "
+
+        # Cleanup
+        os.remove(audio_path)
 
         return jsonify({
-            'success': True,
-            'video_id': video_id,
-            'language': transcript_obj.language,
-            'is_generated': transcript_obj.is_generated,
-            'transcript': transcript
+            "success": True,
+            "language": info.language,
+            "transcript": transcript_text.strip()
         })
 
-    except (TranscriptsDisabled, NoTranscriptFound):
-        return jsonify({
-            'success': False,
-            'error': 'Transcript exists on YouTube but cannot be accessed programmatically'
-        }), 404
-
-    except VideoUnavailable:
-        return jsonify({
-            'success': False,
-            'error': 'Video unavailable'
-        }), 404
-
     except Exception as e:
-        print("SERVER ERROR:", str(e))
         return jsonify({
-            'success': False,
-            'error': str(e)
+            "success": False,
+            "error": str(e)
         }), 500
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
 
