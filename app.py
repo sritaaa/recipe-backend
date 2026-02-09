@@ -41,10 +41,11 @@ def get_transcript():
 
         # Download audio
         ydl_opts = {
-            "format": "bestaudio/best",
+            "format": "bestaudio/best/worst",  # ✅ FIXED: Added fallback formats
             "outtmpl": output_template,
             "quiet": True,
-            "cookiefile": os.path.join(BASE_DIR, "cookies.txt"),  # ✅ FIX: Use cookies file
+            "cookiefile": os.path.join(BASE_DIR, "cookies.txt"),
+            "extract_audio": True,  # ✅ ADDED
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
