@@ -44,7 +44,7 @@ def get_transcript():
             "format": "bestaudio/best",
             "outtmpl": output_template,
             "quiet": True,
-            "cookiesfrombrowser": ("chrome",),  # ✅ FIX: Use browser cookies
+            "cookiefile": os.path.join(BASE_DIR, "cookies.txt"),  # ✅ FIX: Use cookies file
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
